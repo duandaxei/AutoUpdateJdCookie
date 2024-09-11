@@ -3,7 +3,6 @@ import asyncio
 from api.qinglong import QlApi, QlOpenApi
 from api.send import SendApi
 from config import (
-    jd_login_url,
     auto_move,
     qinglong_data,
     user_datas,
@@ -20,6 +19,7 @@ from PIL import Image  # 用于图像处理
 import traceback
 from typing import Union
 from utils.consts import (
+    jd_login_url,
     supported_types,
     supported_colors,
     supported_sms_func
@@ -346,7 +346,7 @@ async def sms_recognition(page, user):
         response = await send_request(url=sms_webhook, method="post", headers=headers, data=data)
         verification_code = response['data']['code']
 
-    asyncio.sleep(1)
+    await asyncio.sleep(1)
     logger.info('填写验证码中...')
     verification_code_input = page.locator('input.acc-input.msgCode')
     for v in verification_code:
@@ -439,7 +439,7 @@ async def get_ql_api(ql_data):
     if client_id and client_secret:
         logger.info("使用client_id和client_secret登录......")
         qlapi = QlOpenApi(ql_data["url"])
-        response = qlapi.login(client_id=client_id, client_secret=client_secret)
+        response = await qlapi.login(client_id=client_id, client_secret=client_secret)
         if response['code'] == 200:
             logger.info("client_id和client_secret正常可用......")
             return qlapi
@@ -458,8 +458,8 @@ async def get_ql_api(ql_data):
         response = await qlapi.get_envs()
         if response['code'] == 401:
             logger.info("Token已失效, 正使用账号密码获取QL登录态......")
-            response = qlapi.login_by_username(ql_data.get("username"), ql_data.get("password"))
-            if response.status_code != 200:
+            response = await qlapi.login_by_username(ql_data.get("username"), ql_data.get("password"))
+            if response['code'] != 200:
                 logger.error(f"账号密码登录失败. response: {response}")
                 raise Exception(f"账号密码登录失败. response: {response}")
         else:
@@ -467,8 +467,8 @@ async def get_ql_api(ql_data):
     else:
         # 最后用账号密码
         logger.info("正使用账号密码获取QL登录态......")
-        response = qlapi.login_by_username(ql_data.get("username"), ql_data.get("password"))
-        if response.status_code != 200:
+        response = await qlapi.login_by_username(ql_data.get("username"), ql_data.get("password"))
+        if response['code'] != 200:
             logger.error(f"账号密码登录失败. response: {response}")
             raise Exception(f"账号密码登录失败.response: {response}")
     return qlapi
