@@ -5,7 +5,10 @@
 - 主要的卡点在于短信验证码识别，目前支持了，所以可以LINUX上运行。
 - 使用手动输入验证码方式进行登录，整体过程如下图
 - 支持docker部署
-
+- 支持的账号类型有：
+  - 账号密码登录
+  - QQ登录(不会出验证码,推荐)
+- 支持代理
 ![PNG](./img/linux.png)
 
 
@@ -58,7 +61,9 @@ playwright install chromium
 
 ### 添加配置config.py
 - 复制config_example.py, 重命名为config.py, 我们基于这个config.py运行程序;
-- user_datas为JD用户数据,按照实际信息填写, force_update设置为True时, 即使账号未失效也更新;
+- user_datas为JD用户数据,按照实际信息填写, 
+  - force_update设置为True时, 即使账号未失效也更新;
+  - 支持QQ账号，user_type指定为qq
 - qinglong_data为QL数据,按照实际信息填写;
   - 建议优先选择用client_id和client_secret,获取方法如下：
   ```commandline
@@ -75,6 +80,7 @@ playwright install chromium
 - auto_shape_recognition为二次图形状验证码的开关;
 - headless设置浏览器是否启用无头模式，即是否展示整个登录过程，**必需使用True**
 - cron_expression基于cron的表达式，用于schedule_main.py定期进行更新任务;
+- proxy为JD登录的代理配置, 只会代理登录，不会代理请求QL面板和发消息;
 - 消息类的配置下面会说明;
 - 消息类的配置下面会说明
 
