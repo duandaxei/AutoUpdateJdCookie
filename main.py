@@ -1,4 +1,5 @@
 import aiohttp
+import argparse
 import asyncio
 from api.qinglong import QlApi, QlOpenApi
 from api.send import SendApi
@@ -40,7 +41,8 @@ from utils.tools import (
     cv2_save_img,
     ddddocr_find_bytes_pic,
     solve_slider_captcha,
-    validate_proxy_config
+    validate_proxy_config,
+    is_valid_verification_code
 )
 
 """
@@ -297,7 +299,7 @@ async def auto_shape(page, retry_times: int = 5):
                 continue
 
 
-async def sms_recognition(page, user):
+async def sms_recognition(page, user, mode):
     try:
         from config import sms_func
     except ImportError:
@@ -307,6 +309,9 @@ async def sms_recognition(page, user):
 
     if sms_func not in supported_sms_func:
         raise Exception(f"sms_func只支持{supported_sms_func}")
+
+    if mode == "cron" and sms_func == "manual_input":
+        sms_func = "no"
 
     if sms_func == "no":
         raise Exception("sms_func为no关闭, 跳过短信验证码识别环节")
@@ -351,6 +356,10 @@ async def sms_recognition(page, user):
         verification_code = response['data']['code']
 
     await asyncio.sleep(1)
+    if not is_valid_verification_code(verification_code):
+        logger.error(f"验证码需为6位数字, 输入的验证码为{verification_code}, 异常")
+        raise Exception(f"验证码异常")
+
     logger.info('填写验证码中...')
     verification_code_input = page.locator('input.acc-input.msgCode')
     for v in verification_code:
@@ -360,7 +369,7 @@ async def sms_recognition(page, user):
     logger.info('点击提交中...')
     await page.click('a.btn')
 
-async def get_jd_pt_key(playwright: Playwright, user) -> Union[str, None]:
+async def get_jd_pt_key(playwright: Playwright, user, mode) -> Union[str, None]:
     """
     获取jd的pt_key
     """
@@ -425,6 +434,14 @@ async def get_jd_pt_key(playwright: Playwright, user) -> Union[str, None]:
             await asyncio.sleep(1)
             # 点击登录按钮
             await iframe.locator("#login_button").click()
+            await asyncio.sleep(1)
+            # 这里检测安全验证
+            new_vcode_area = iframe.locator("div#newVcodeArea")
+            style = await new_vcode_area.get_attribute("style")
+            if style and "display: block" in style:
+                if await new_vcode_area.get_by_text("安全验证").text_content() == "安全验证":
+                    logger.error(f"QQ号{user}需要安全验证, 登录失败，请使用其它账号类型")
+                    raise Exception(f"QQ号{user}需要安全验证, 登录失败，请使用其它账号类型")
 
         else:
             await page.get_by_text("账号密码登录").click()
@@ -457,7 +474,7 @@ async def get_jd_pt_key(playwright: Playwright, user) -> Union[str, None]:
             await asyncio.sleep(1)
             if await page.locator('text="手机短信验证"').count() != 0:
                 logger.info("开始短信验证码识别环节")
-                await sms_recognition(page, user)
+                await sms_recognition(page, user, mode)
 
         # 等待验证码通过
         logger.info("等待获取cookie...")
@@ -527,7 +544,10 @@ async def get_ql_api(ql_data):
     return qlapi
 
 
-async def main():
+async def main(mode: str = None):
+    """
+    :param mode 运行模式, 当mode = cron时，sms_func为 manual_input时，将自动传成no
+    """
     try:
         qlapi = await get_ql_api(qinglong_data)
         send_api = SendApi("ql")
@@ -560,7 +580,7 @@ async def main():
         async with async_playwright() as playwright:
             for user in user_dict:
                 logger.info(f"开始更新{user}")
-                pt_key = await get_jd_pt_key(playwright, user)
+                pt_key = await get_jd_pt_key(playwright, user, mode)
                 if pt_key is None:
                     logger.error(f"获取pt_key失败")
                     await send_msg(send_api, send_type=1, msg=f"{user} 更新失败")
@@ -590,5 +610,15 @@ async def main():
         traceback.print_exc()
 
 
+def parse_args():
+    """
+    解析参数
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--mode', choices=['cron'], help="运行的main的模式(例如: 'cron')")
+    return parser.parse_args()
+
 if __name__ == '__main__':
-    asyncio.run(main())
+    # 使用解析参数的函数
+    args = parse_args()
+    asyncio.run(main(mode=args.mode))
